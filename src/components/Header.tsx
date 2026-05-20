@@ -3,9 +3,10 @@ import type { MetaState } from '../game/types';
 interface Props {
   meta: MetaState;
   reignMult: number;
+  savedAt: Date | null;
 }
 
-export default function Header({ meta, reignMult }: Props) {
+export default function Header({ meta, reignMult, savedAt }: Props) {
   return (
     <header className="header">
       <span className="header-title">THERMAL RUNAWAY</span>
@@ -23,6 +24,11 @@ export default function Header({ meta, reignMult }: Props) {
           <span className="stat-value">×{reignMult.toFixed(2)}</span>
         </div>
       </div>
+      {savedAt && (
+        <span style={{ color: 'var(--dim)', fontSize: 10, marginLeft: 'auto' }}>
+          💾 {savedAt.toLocaleTimeString()}
+        </span>
+      )}
     </header>
   );
 }

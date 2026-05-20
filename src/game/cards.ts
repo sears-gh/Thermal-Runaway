@@ -7,9 +7,10 @@ import {
   MAX_BRANCHING_COPIES,
 } from './constants';
 
-let _nextId = 0;
 function newInstanceId(): string {
-  return `c${++_nextId}_${Math.random().toString(36).slice(2, 6)}`;
+  // Date.now prefix ensures uniqueness across page reloads; random suffix
+  // prevents collisions within the same millisecond.
+  return `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function makeCardInstance(defId: string): CardInstance {

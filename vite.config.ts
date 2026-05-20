@@ -1,9 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-
-const base = process.env.BASE_URL ? `${process.env.BASE_URL}/` : '/';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 
 export default defineConfig({
-  plugins: [react()],
-  base,
+  plugins: [react(), viteSingleFile()],
+  build: {
+    // Help singlefile inline everything
+    assetsInlineLimit: 100 * 1024 * 1024,
+    cssCodeSplit: false,
+  },
 });
