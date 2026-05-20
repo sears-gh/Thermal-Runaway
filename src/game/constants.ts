@@ -1,0 +1,15 @@
+export const FLASHOVER_THRESHOLD = 1e6;
+export const BASE_V = 2;
+export const AIR_CAP_BASE = 12;
+export const AIR_CAP_BOOST = 14;
+export const BASE_N = 12;
+export const BASE_C0 = 50;
+export const BASE_K = 0.10;
+export const REIGN_MULT_FACTOR = 1.25;
+export const BELOW_DANGER_SECS = 5;
+export const FROST_BASE_DUR = 4;
+export const FROST_DECAY = 0.7;
+export const MAX_BRANCHING_COPIES = 6;
+export const GRAPH_LEN = 200;
+export const MAX_TICKS_PER_FRAME = 120;
+export const MAX_FRAME_ELAPSED = 0.2;
