@@ -35,6 +35,7 @@ export interface RunSave {
   draftChoices: string[];
   graphPH: number[];
   graphCool: number[];
+  graphT: number[];
   savedAt: number;
 }
 
@@ -66,6 +67,7 @@ export function buildRunSave(
   draftChoices: string[],
   graphPH: number[],
   graphCool: number[],
+  graphT: number[],
 ): RunSave {
   return {
     phase,
@@ -91,6 +93,7 @@ export function buildRunSave(
     draftChoices: [...draftChoices],
     graphPH: [...graphPH],
     graphCool: [...graphCool],
+    graphT: [...graphT],
     savedAt: Date.now(),
   };
 }
