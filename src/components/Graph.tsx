@@ -1,12 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { FLASHOVER_THRESHOLD, GRAPH_LEN } from '../game/constants';
+import { FLASHOVER_THRESHOLD } from '../game/constants';
+import { fmtNum } from '../game/utils';
 
 interface Props {
   graphPH: number[];
   graphCool: number[];
+  graphT: number[];
 }
 
-export default function Graph({ graphPH, graphCool }: Props) {
+const PAD_L = 38;
+const PAD_B = 18;
+
+export default function Graph({ graphPH, graphCool, graphT }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -16,46 +21,111 @@ export default function Graph({ graphPH, graphCool }: Props) {
     if (!ctx) return;
 
     const W = (canvas.width = canvas.offsetWidth || 300);
-    const H = (canvas.height = 110);
+    const H = (canvas.height = canvas.offsetHeight || 150);
 
-    ctx.clearRect(0, 0, W, H);
+    // Fill background
+    ctx.fillStyle = '#0b0b12';
+    ctx.fillRect(0, 0, W, H);
 
-    const maxVal = Math.max(...graphPH, ...graphCool, FLASHOVER_THRESHOLD * 0.05, 1);
-    const sy = (v: number) => H - (v / maxVal) * H * 0.88 - H * 0.06;
-    const sx = (i: number) => (i / (GRAPH_LEN - 1)) * W;
+    const n = graphPH.length;
+    const maxVal = Math.max(...graphPH, ...graphCool, 1);
+    const logMax = Math.log10(Math.max(maxVal, FLASHOVER_THRESHOLD));
 
-    // Flashover threshold line
-    const ty = sy(FLASHOVER_THRESHOLD);
-    if (ty >= 0 && ty <= H) {
-      ctx.strokeStyle = 'rgba(255,107,53,0.25)';
+    const sy = (v: number) =>
+      (H - PAD_B) * (1 - (Math.log10(Math.max(v, 1)) - 0) / logMax) + 2;
+
+    const sx = (i: number) =>
+      PAD_L + (i / Math.max(n - 1, 1)) * (W - PAD_L - 6);
+
+    // Horizontal dashed gridlines
+    const gridValues = [1, 10, 100, 1e3, 1e4, 1e5, 1e6];
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 0.5;
+    ctx.font = '9px Courier New, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for (const gv of gridValues) {
+      const gy = sy(gv);
+      if (gy < 2 || gy > H - PAD_B + 2) continue;
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, gy);
+      ctx.lineTo(W - 6, gy);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(107,107,128,0.9)';
+      ctx.fillText(fmtNum(gv), PAD_L - 3, gy);
+    }
+
+    // Flashover threshold orange dashed line
+    const flashY = sy(FLASHOVER_THRESHOLD);
+    if (flashY >= 2 && flashY <= H - PAD_B + 2) {
+      ctx.strokeStyle = 'rgba(255,107,53,0.55)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(0, ty);
-      ctx.lineTo(W, ty);
+      ctx.moveTo(PAD_L, flashY);
+      ctx.lineTo(W - 6, flashY);
       ctx.stroke();
-      ctx.setLineDash([]);
+    }
+
+    ctx.setLineDash([]);
+
+    // X axis time labels (~4 labels)
+    if (graphT.length >= 2) {
+      ctx.fillStyle = 'rgba(107,107,128,0.8)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.font = '9px Courier New, monospace';
+      const labelCount = 4;
+      for (let li = 0; li <= labelCount; li++) {
+        const idx = Math.round((li / labelCount) * (n - 1));
+        const x = sx(idx);
+        const tVal = graphT[idx] ?? 0;
+        ctx.fillText(`${tVal.toFixed(0)}s`, x, H - 1);
+      }
     }
 
     // Cooling curve
-    ctx.strokeStyle = 'var(--cool, #4ecdc4)';
+    ctx.strokeStyle = '#4ecdc4';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    graphCool.forEach((v, i) => {
-      const x = sx(i), y = sy(v);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
+    let inPath = false;
+    for (let i = 0; i < n; i++) {
+      const v = graphCool[i];
+      if (v <= 0) { inPath = false; continue; }
+      const x = sx(i);
+      const y = sy(v);
+      if (!inPath) { ctx.moveTo(x, y); inPath = true; }
+      else ctx.lineTo(x, y);
+    }
     ctx.stroke();
 
     // PH curve
-    ctx.strokeStyle = 'var(--accent2, #ffd166)';
+    ctx.strokeStyle = '#ffd166';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    graphPH.forEach((v, i) => {
-      const x = sx(i), y = sy(v);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
+    inPath = false;
+    for (let i = 0; i < n; i++) {
+      const v = graphPH[i];
+      if (v <= 0) { inPath = false; continue; }
+      const x = sx(i);
+      const y = sy(v);
+      if (!inPath) { ctx.moveTo(x, y); inPath = true; }
+      else ctx.lineTo(x, y);
+    }
     ctx.stroke();
+
+    // Small legend top-right
+    const lx = W - 6;
+    const ly = 8;
+    ctx.font = '9px Courier New, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('PH', lx, ly);
+    ctx.fillStyle = '#4ecdc4';
+    ctx.fillText('Cool', lx, ly + 13);
   });
 
   return (

@@ -1,6 +1,6 @@
 export type CardRarity = 'common' | 'uncommon' | 'rare' | 'challenge';
 export type TickResult = 'OK' | 'FLASH' | 'REIGN';
-export type GamePhase = 'idle' | 'running' | 'paused' | 'draft' | 'refine' | 'flashover';
+export type GamePhase = 'idle' | 'running' | 'paused' | 'draft' | 'refine' | 'flashover' | 'reorder';
 
 export interface CardInstance {
   defId: string;
@@ -99,4 +99,5 @@ export interface Snapshot {
   reignMult: number;
   graphPH: number[];
   graphCool: number[];
+  graphT: number[];
 }

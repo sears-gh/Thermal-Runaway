@@ -25,9 +25,10 @@ import Furnace from './components/Furnace';
 import Graph from './components/Graph';
 import RaceInfo from './components/RaceInfo';
 import DraftPanel from './components/DraftPanel';
-import Hearth from './components/Hearth';
 import Log from './components/Log';
 import FlashoverScreen from './components/FlashoverScreen';
+import ReorderPanel from './components/ReorderPanel';
+import HearthModal from './components/HearthModal';
 
 // Auto-save interval while running (measured in race-seconds to be
 // speed-independent; roughly every 30 simulated seconds).
@@ -71,6 +72,7 @@ function snapFromSim(
   state: SimState,
   graphPH: number[],
   graphCool: number[],
+  graphT: number[],
 ): Snapshot {
   return {
     PH: state.PH,
@@ -88,6 +90,7 @@ function snapFromSim(
     reignMult: state.reignMult,
     graphPH: [...graphPH],
     graphCool: [...graphCool],
+    graphT: [...graphT],
   };
 }
 
@@ -106,6 +109,7 @@ export default function App() {
   const [draftChoices, setDraftChoices] = useState<string[]>([]);
   const [flashData, setFlashData] = useState<{ peakPH: number; ash: number } | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [showHearthModal, setShowHearthModal] = useState(false);
 
   // ── Mutable refs (game engine — no re-renders) ────────────────────────────
   const simRef = useRef<SimState | null>(null);
@@ -116,6 +120,7 @@ export default function App() {
   const lastTRef = useRef(0);
   const graphPHRef = useRef<number[]>(new Array(GRAPH_LEN).fill(0));
   const graphCoolRef = useRef<number[]>(new Array(GRAPH_LEN).fill(0));
+  const graphTRef = useRef<number[]>(new Array(GRAPH_LEN).fill(0));
   const draftChoicesRef = useRef<string[]>([]);
   const lastSaveSimTRef = useRef(0); // last autosave in sim-seconds
   const logIdRef = useRef(0);
@@ -171,6 +176,7 @@ export default function App() {
         choices,
         graphPHRef.current,
         graphCoolRef.current,
+        graphTRef.current,
       );
       doSave(rs);
       setPhase('draft');
@@ -196,7 +202,7 @@ export default function App() {
   const takeSnapshot = useCallback(() => {
     const state = simRef.current;
     if (!state) return;
-    setSnap(snapFromSim(state, graphPHRef.current, graphCoolRef.current));
+    setSnap(snapFromSim(state, graphPHRef.current, graphCoolRef.current, graphTRef.current));
   }, []);
 
   // ── Stable rAF loop ───────────────────────────────────────────────────────
@@ -223,8 +229,10 @@ export default function App() {
 
       graphPHRef.current.push(state.PH);
       graphCoolRef.current.push(coolValue(state));
+      graphTRef.current.push(state.t);
       if (graphPHRef.current.length > GRAPH_LEN) graphPHRef.current.shift();
       if (graphCoolRef.current.length > GRAPH_LEN) graphCoolRef.current.shift();
+      if (graphTRef.current.length > GRAPH_LEN) graphTRef.current.shift();
 
       takeSnapshot();
 
@@ -248,6 +256,7 @@ export default function App() {
           draftChoicesRef.current,
           graphPHRef.current,
           graphCoolRef.current,
+          graphTRef.current,
         );
         doSave(rs);
       }
@@ -280,6 +289,7 @@ export default function App() {
     simRef.current = simFromRunSave(run);
     graphPHRef.current = [...run.graphPH];
     graphCoolRef.current = [...run.graphCool];
+    graphTRef.current = [...run.graphT];
     draftChoicesRef.current = run.draftChoices;
     lastSaveSimTRef.current = run.t;
 
@@ -291,7 +301,7 @@ export default function App() {
       setPhase('paused');
     }
 
-    setSnap(snapFromSim(simRef.current, graphPHRef.current, graphCoolRef.current));
+    setSnap(snapFromSim(simRef.current, graphPHRef.current, graphCoolRef.current, graphTRef.current));
     addLog(
       `セーブデータを復元しました（${new Date(run.savedAt).toLocaleTimeString()} 保存）`,
       'important',
@@ -307,12 +317,24 @@ export default function App() {
     simRef.current = createSimState(deck, m);
     graphPHRef.current = new Array(GRAPH_LEN).fill(0);
     graphCoolRef.current = new Array(GRAPH_LEN).fill(0);
+    graphTRef.current = new Array(GRAPH_LEN).fill(0);
     draftChoicesRef.current = [];
     accumRef.current = 0;
     lastSaveSimTRef.current = 0;
     addLog('Run 開始', 'important');
-    setPhase('running');
+    setPhase('reorder');
   }, [addLog, setPhase]);
+
+  const ignite = useCallback(() => {
+    accumRef.current = 0;
+    setPhase('running');
+  }, [setPhase]);
+
+  const handleReorder = useCallback((newDeck: CardInstance[]) => {
+    if (simRef.current) {
+      simRef.current.deck = newDeck;
+    }
+  }, []);
 
   const pauseResume = useCallback(() => {
     const p = phaseRef.current;
@@ -325,6 +347,7 @@ export default function App() {
           draftChoicesRef.current,
           graphPHRef.current,
           graphCoolRef.current,
+          graphTRef.current,
         );
         doSave(rs);
       }
@@ -332,6 +355,21 @@ export default function App() {
     } else if (p === 'paused') {
       accumRef.current = 0;
       setPhase('running');
+    } else if (p === 'reorder') {
+      // treat reorder like paused for save purposes
+      const state = simRef.current;
+      if (state) {
+        const rs = buildRunSave(
+          'paused',
+          state,
+          draftChoicesRef.current,
+          graphPHRef.current,
+          graphCoolRef.current,
+          graphTRef.current,
+        );
+        doSave(rs);
+      }
+      setPhase('paused');
     }
   }, [setPhase, doSave]);
 
@@ -339,6 +377,7 @@ export default function App() {
     simRef.current = null;
     graphPHRef.current = new Array(GRAPH_LEN).fill(0);
     graphCoolRef.current = new Array(GRAPH_LEN).fill(0);
+    graphTRef.current = new Array(GRAPH_LEN).fill(0);
     setSnap(null);
     // Clear run save but keep meta
     doSave(null);
@@ -353,7 +392,7 @@ export default function App() {
       state.deck.push(makeCardInstance(defId));
       addLog(`ドラフト: ${CARD_DEFS[defId]?.name ?? defId} を追加`, 'important');
       addLog(`再点火 #${state.reignCount} — ×${state.reignMult.toFixed(2)}`, 'important');
-      setPhase('running');
+      setPhase('reorder');
     },
     [addLog, setPhase],
   );
@@ -368,7 +407,7 @@ export default function App() {
       if (state.head >= state.deck.length) state.head = 0;
       addLog(`精錬: ${CARD_DEFS[removed.defId]?.name ?? removed.defId} を除去`, 'important');
       addLog(`再点火 #${state.reignCount} — ×${state.reignMult.toFixed(2)}`, 'important');
-      setPhase('running');
+      setPhase('reorder');
     },
     [addLog, setPhase],
   );
@@ -379,7 +418,7 @@ export default function App() {
     state.skipBonus += 10;
     addLog('ドラフト スキップ（PH+10）');
     addLog(`再点火 #${state.reignCount} — ×${state.reignMult.toFixed(2)}`, 'important');
-    setPhase('running');
+    setPhase('reorder');
   }, [addLog, setPhase]);
 
   const continueAfterFlashover = useCallback(() => {
@@ -422,54 +461,92 @@ export default function App() {
   // ── Render ────────────────────────────────────────────────────────────────
   const showDraft = phase === 'draft' || phase === 'refine';
 
+  // Bottom card area slot
+  let bottomSlot: React.ReactNode;
+  if (phase === 'reorder') {
+    bottomSlot = (
+      <ReorderPanel
+        initialDeck={simRef.current?.deck ?? []}
+        reignCount={snap?.reignCount ?? 0}
+        onReorder={handleReorder}
+        onConfirm={ignite}
+      />
+    );
+  } else if (phase === 'running' || phase === 'paused') {
+    bottomSlot = <Furnace snap={snap} />;
+  } else {
+    bottomSlot = (
+      <div className="card-area">
+        <div className="card-area-idle">START RUN を押して点火せよ</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <Header meta={meta} reignMult={snap?.reignMult ?? 1} savedAt={savedAt} />
 
-      <div className="main">
-        <div className="left-panel">
-          <Furnace snap={snap} />
-          <Graph graphPH={snap?.graphPH ?? []} graphCool={snap?.graphCool ?? []} />
-          <RaceInfo snap={snap} phase={phase} />
-          <div className="controls">
-            <button className="primary" onClick={startRun} disabled={phase !== 'idle'}>
-              ▶ START RUN
-            </button>
-            <button
-              onClick={pauseResume}
-              disabled={phase !== 'running' && phase !== 'paused'}
-            >
-              {phase === 'paused' ? '▶ RESUME' : '⏸ PAUSE'}
-            </button>
-            <button onClick={abortRun} disabled={phase === 'idle' || phase === 'flashover'}>
-              ↺ ABORT RUN
-            </button>
-            <button
-              onClick={hardReset}
-              style={{ marginTop: 8, fontSize: 10, color: 'var(--dim)', borderColor: 'transparent' }}
-            >
-              全データリセット
-            </button>
+      <div className="body">
+        <div className="top-area">
+          <div className="left-panel">
+            <Graph
+              graphPH={snap?.graphPH ?? []}
+              graphCool={snap?.graphCool ?? []}
+              graphT={snap?.graphT ?? []}
+            />
+            <RaceInfo snap={snap} phase={phase} />
+            <div className="controls">
+              <button className="primary" onClick={startRun} disabled={phase !== 'idle'}>
+                ▶ START RUN
+              </button>
+              <button
+                onClick={pauseResume}
+                disabled={phase !== 'running' && phase !== 'paused' && phase !== 'reorder'}
+              >
+                {phase === 'paused' ? '▶ RESUME' : '⏸ PAUSE'}
+              </button>
+              <button onClick={abortRun} disabled={phase === 'idle' || phase === 'flashover'}>
+                ↺ ABORT RUN
+              </button>
+              <button onClick={() => setShowHearthModal(true)}>
+                🏠 炉床 ({meta.ash} Ash)
+              </button>
+              <button
+                onClick={hardReset}
+                style={{ marginTop: 8, fontSize: 10, color: 'var(--dim)', borderColor: 'transparent' }}
+              >
+                全データリセット
+              </button>
+            </div>
+          </div>
+
+          <div className="right-panel">
+            {showDraft && (
+              <DraftPanel
+                choices={draftChoices}
+                deck={simRef.current?.deck ?? []}
+                phase={phase}
+                onPick={pickDraftCard}
+                onRefine={refineCard}
+                onSkip={skipDraft}
+                onShowRefine={() => setPhase('refine')}
+                onCancelRefine={() => setPhase('draft')}
+              />
+            )}
+            <Log entries={logs} />
           </div>
         </div>
 
-        <div className="right-panel">
-          {showDraft && (
-            <DraftPanel
-              choices={draftChoices}
-              deck={simRef.current?.deck ?? []}
-              phase={phase}
-              onPick={pickDraftCard}
-              onRefine={refineCard}
-              onSkip={skipDraft}
-              onShowRefine={() => setPhase('refine')}
-              onCancelRefine={() => setPhase('draft')}
-            />
-          )}
-          <Log entries={logs} />
-          <Hearth meta={meta} onPurchase={purchaseHearth} />
-        </div>
+        {bottomSlot}
       </div>
+
+      {showHearthModal && (
+        <HearthModal
+          meta={meta}
+          onPurchase={purchaseHearth}
+          onClose={() => setShowHearthModal(false)}
+        />
+      )}
 
       {phase === 'flashover' && flashData && (
         <FlashoverScreen

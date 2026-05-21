@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import type { Snapshot } from '../game/types';
 import { CARD_DEFS } from '../game/cards';
 import { FLASHOVER_THRESHOLD } from '../game/constants';
@@ -9,52 +9,56 @@ interface Props {
 
 export default function Furnace({ snap }: Props) {
   const prevHeadRef = useRef(-1);
-  const firedRef = useRef<string | null>(null);
+  const firedIdRef = useRef<string | null>(null);
 
   const deck = snap?.deck ?? [];
   const head = snap?.head ?? 0;
   const phRatio = snap ? Math.min(1, snap.PH / FLASHOVER_THRESHOLD) : 0;
 
-  // Track which instanceId just fired for the flash animation
-  const prevHead = (head - 1 + Math.max(deck.length, 1)) % Math.max(deck.length, 1);
-  if (snap && prevHead !== prevHeadRef.current) {
-    firedRef.current = deck[prevHead]?.instanceId ?? null;
-    prevHeadRef.current = prevHead;
+  // Track just-fired card
+  if (snap && head !== prevHeadRef.current) {
+    const prevHead = (head - 1 + Math.max(deck.length, 1)) % Math.max(deck.length, 1);
+    firedIdRef.current = deck[prevHead]?.instanceId ?? null;
+    prevHeadRef.current = head;
   }
-  if (!snap) firedRef.current = null;
+  if (!snap) { firedIdRef.current = null; prevHeadRef.current = -1; }
 
   return (
-    <div className="section furnace-section">
-      <div className="section-title">◈ Cycling Furnace</div>
-      <div className="deck-display">
+    <div className="card-area">
+      <div className="card-area-header">
+        <span className="card-area-title">◈ CYCLING FURNACE</span>
+        <div style={{ flex: 1, marginLeft: 16, marginRight: 16, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ width: `${phRatio * 100}%`, height: '100%', background: 'linear-gradient(90deg,var(--accent),var(--accent2))', transition: 'width .1s linear' }} />
+        </div>
+        <span className="card-area-hint" style={{ whiteSpace: 'nowrap' }}>T=1M</span>
+      </div>
+      <div className="card-row">
         {deck.map((card, i) => {
           const def = CARD_DEFS[card.defId];
           const isActive = i === head;
-          const isFired = card.instanceId === firedRef.current && !isActive;
+          const isFired = card.instanceId === firedIdRef.current && !isActive;
           const rarity = def?.rarity ?? 'common';
 
-          let cls = 'card-chip';
-          if (isActive) cls += ' card-chip--active';
-          else if (isFired) cls += ' card-chip--fired';
-          if (rarity === 'rare') cls += ' card-chip--rare';
-          if (rarity === 'challenge') cls += ' card-chip--challenge';
-          if (card.isWeakCopy) cls += ' card-chip--weak';
+          let cls = `card-tile rarity-${rarity}`;
+          if (isActive) cls += ' card-tile--active';
+          else if (isFired) cls += ' card-tile--fired';
 
           return (
             <div key={card.instanceId} className={cls}>
-              {def?.name ?? card.defId}
+              <span className="card-tile-index">{i + 1}</span>
+              {isActive && <span className="card-tile-playhead">▶</span>}
+              <span className="card-tile-name">{def?.name ?? card.defId}</span>
+              <span className="card-tile-desc">{def?.desc ?? ''}</span>
               {card.charges !== undefined && (
-                <span className="charge-badge">[{card.charges}]</span>
+                <span className="card-tile-charge">⚡ ×{card.charges}</span>
               )}
+              <span className={`rarity-text-${rarity}`}>{rarity}</span>
             </div>
           );
         })}
         {deck.length === 0 && (
-          <span style={{ color: 'var(--dim)', fontSize: 11 }}>—</span>
+          <div className="card-area-idle">— カードなし —</div>
         )}
-      </div>
-      <div className="ph-bar-wrap">
-        <div className="ph-bar" style={{ width: `${phRatio * 100}%` }} />
       </div>
     </div>
   );
