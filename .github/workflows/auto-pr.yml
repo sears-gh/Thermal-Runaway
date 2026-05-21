@@ -5,6 +5,7 @@ on:
     branches:
       - '**'
       - '!main'
+      - '!gh-pages'
 
 permissions:
   contents: read
